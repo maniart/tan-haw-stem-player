@@ -291,13 +291,16 @@
       const buf = buffers[name];
       if (!buf) return;
 
-      // Stop anything already playing for this pad
-      const prev = sources[name];
-      if (prev) {
-        prev._manualStop = true;
-        try { prev.stop(); } catch (_) {}
-        delete sources[name];
-      }
+      // Stop ALL playing clips — exclusive one-shot mode
+      SAMPLES.forEach(n => {
+        const prev = sources[n];
+        if (prev) {
+          prev._manualStop = true;
+          try { prev.stop(); } catch (_) {}
+          delete sources[n];
+          if (n !== name) setState(n, 'played');
+        }
+      });
 
       const src = ctx.createBufferSource();
       src.buffer = buf;
