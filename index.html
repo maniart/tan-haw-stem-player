@@ -250,14 +250,14 @@
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
     function ensureRunning() {
-      if (ctx.state !== 'running') ctx.resume();
+      return ctx.state !== 'running' ? ctx.resume() : Promise.resolve();
     }
 
     // Prime the audio hardware on first touch so playback is instant.
     // iOS spins up the audio engine lazily — playing a silent 1-sample buffer
     // forces it to warm up before the first real clip is triggered.
-    document.addEventListener('pointerdown', function prime() {
-      ensureRunning();
+    document.addEventListener('pointerdown', async function prime() {
+      await ensureRunning();
       const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
       const src = ctx.createBufferSource();
       src.buffer = silent;
@@ -286,8 +286,8 @@
     });
 
     // ── Trigger ───────────────────────────────────────────────────────────────
-    function trigger(name) {
-      ensureRunning();
+    async function trigger(name) {
+      await ensureRunning();
       const buf = buffers[name];
       if (!buf) return;
 
