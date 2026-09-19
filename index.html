@@ -253,6 +253,19 @@
       if (ctx.state !== 'running') ctx.resume();
     }
 
+    // Prime the audio hardware on first touch so playback is instant.
+    // iOS spins up the audio engine lazily — playing a silent 1-sample buffer
+    // forces it to warm up before the first real clip is triggered.
+    document.addEventListener('pointerdown', function prime() {
+      ensureRunning();
+      const silent = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = silent;
+      src.connect(ctx.destination);
+      src.start(0);
+      document.removeEventListener('pointerdown', prime);
+    }, { capture: true });
+
     // ── State ─────────────────────────────────────────────────────────────────
     const buffers  = {};   // name → AudioBuffer
     const sources  = {};   // name → AudioBufferSourceNode (currently playing)
