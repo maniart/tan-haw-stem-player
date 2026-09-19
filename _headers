@@ -1,0 +1,18 @@
+# MP3s — long cache, correct MIME type
+/mp3/*
+  Content-Type: audio/mpeg
+  Cache-Control: public, max-age=31536000, immutable
+
+# Service worker — must never be cached
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# Manifest
+/manifest.json
+  Content-Type: application/manifest+json
+  Cache-Control: no-cache
+
+# Everything else
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
