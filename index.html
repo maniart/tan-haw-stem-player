@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#080808">
+  <title>SMPLR</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #080808;
+      overflow: hidden;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #ccc;
+    }
+
+    /* ── Portrait guard ── */
+    #rotate-msg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #080808;
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #rotate-msg svg { opacity: 0.25; }
+    #rotate-msg p {
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: #555;
+    }
+    @media (orientation: portrait) {
+      #rotate-msg { display: flex; }
+      #app { visibility: hidden; }
+    }
+
+    /* ── Loading screen ── */
+    #loading {
+      position: fixed;
+      inset: 0;
+      background: #080808;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.4s;
+    }
+    #loading.out {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #loading-label {
+      font-size: 10px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #404040;
+    }
+    #loading-track {
+      width: 140px;
+      height: 1px;
+      background: #1e1e1e;
+    }
+    #loading-fill {
+      height: 100%;
+      width: 0%;
+      background: #d4540c;
+      transition: width 0.25s ease;
+    }
+
+    /* ── App shell ── */
+    #app {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 28px;
+      flex-shrink: 0;
+      padding: 0 2px;
+    }
+    header h1 {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: #303030;
+    }
+    #reset-btn {
+      background: none;
+      border: 1px solid #202020;
+      color: #303030;
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+      touch-action: manipulation;
+    }
+    #reset-btn:active {
+      color: #888;
+      border-color: #444;
+    }
+
+    /* ── Grid ── */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 8px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* ── Pad base ── */
+    .pad {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #181818;
+      border: 1px solid #242424;
+      border-radius: 4px;
+      cursor: pointer;
+      touch-action: none;
+      overflow: hidden;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    /* Ready indicator — thin top line */
+    .pad::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #d4540c;
+      transition: opacity 0.25s;
+    }
+
+    .pad-label {
+      font-size: clamp(28px, 5.5vw, 72px);
+      font-weight: 300;
+      letter-spacing: 0.04em;
+      color: #c0c0c0;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.2s;
+      pointer-events: none;
+    }
+
+    /* ── State: played ── */
+    .pad.played {
+      background: #0e0e0e;
+      border-color: #171717;
+    }
+    .pad.played::after {
+      opacity: 0;
+    }
+    .pad.played .pad-label {
+      color: #2c2c2c;
+    }
+
+    /* ── State: playing ── */
+    .pad.playing {
+      border-color: #c44010;
+      animation: throb 1.4s ease-in-out infinite;
+    }
+    .pad.playing::after {
+      opacity: 0;
+    }
+    .pad.playing .pad-label {
+      color: #fff;
+    }
+
+    @keyframes throb {
+      0%, 100% { background: #aa3808; }
+        50%     { background: #e8560e; }
+    }
+
+    /* ── Press feedback ── */
+    .pad:not(.playing):active {
+      background: #242424;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Portrait guard -->
+  <div id="rotate-msg" aria-hidden="true">
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+      <rect x="8" y="4" width="24" height="32" rx="3" stroke="#888" stroke-width="1.5"/>
+      <path d="M17 34h6" stroke="#888" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <p>Rotate to landscape</p>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div id="loading-label">Loading</div>
+    <div id="loading-track"><div id="loading-fill"></div></div>
+  </div>
+
+  <!-- App -->
+  <div id="app">
+    <header>
+      <h1>Sample Player</h1>
+      <button id="reset-btn">Reset</button>
+    </header>
+    <div id="grid"></div>
+  </div>
+
+  <script>
+    // ── Config ───────────────────────────────────────────────────────────────
+    const SAMPLES = ['00','01','02','03','04','05','06','07','08'];
+
+    // ── Audio context ─────────────────────────────────────────────────────────
+    // Create immediately so we can decode; will resume on first tap.
+    let ctx;
+    function getCtx() {
+      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+
+    // Unlock audio on first touch (needed for iOS)
+    document.addEventListener('pointerdown', () => getCtx(), { once: true });
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    const buffers  = {};   // name → AudioBuffer
+    const sources  = {};   // name → AudioBufferSourceNode (currently playing)
+
+    // ── Build grid ────────────────────────────────────────────────────────────
+    const gridEl = document.getElementById('grid');
+    SAMPLES.forEach(name => {
+      const pad = document.createElement('button');
+      pad.className = 'pad';
+      pad.id = `pad-${name}`;
+      pad.setAttribute('aria-label', `Sample ${name}`);
+      pad.innerHTML = `<span class="pad-label">${name}</span>`;
+      pad.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        trigger(name);
+      });
+      gridEl.appendChild(pad);
+    });
+
+    // ── Trigger ───────────────────────────────────────────────────────────────
+    function trigger(name) {
+      const audioCtx = getCtx();
+      const buf = buffers[name];
+      if (!buf) return;
+
+      // Stop anything already playing for this pad
+      const prev = sources[name];
+      if (prev) {
+        prev._manualStop = true;
+        try { prev.stop(); } catch (_) {}
+        delete sources[name];
+      }
+
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.loop = false;
+      src.connect(audioCtx.destination);
+
+      setState(name, 'playing');
+      sources[name] = src;
+
+      src.onended = () => {
+        if (sources[name] === src) {
+          delete sources[name];
+          if (!src._manualStop) setState(name, 'played');
+        }
+      };
+
+      src.start(0);
+    }
+
+    // ── Visual state ──────────────────────────────────────────────────────────
+    function setState(name, state) {
+      const pad = document.getElementById(`pad-${name}`);
+      if (!pad) return;
+      pad.className = 'pad' + (state !== 'unplayed' ? ` ${state}` : '');
+    }
+
+    // ── Reset ─────────────────────────────────────────────────────────────────
+    document.getElementById('reset-btn').addEventListener('pointerdown', e => {
+      e.preventDefault();
+      SAMPLES.forEach(name => {
+        const src = sources[name];
+        if (src) {
+          src._manualStop = true;
+          try { src.stop(); } catch (_) {}
+          delete sources[name];
+        }
+        setState(name, 'unplayed');
+      });
+    });
+
+    // ── Load samples ──────────────────────────────────────────────────────────
+    const loadingEl   = document.getElementById('loading');
+    const loadingFill = document.getElementById('loading-fill');
+    let loaded = 0;
+
+    // Need a context to decode; create one quietly.
+    const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function onProgress() {
+      loaded++;
+      loadingFill.style.width = `${(loaded / SAMPLES.length) * 100}%`;
+      if (loaded === SAMPLES.length) {
+        // Short delay so the bar visually completes before fade
+        setTimeout(() => loadingEl.classList.add('out'), 200);
+        setTimeout(() => { loadingEl.style.display = 'none'; }, 650);
+      }
+    }
+
+    function decodeAudio(arrayBuffer) {
+      return new Promise((res, rej) => decodeCtx.decodeAudioData(arrayBuffer, res, rej));
+    }
+
+    SAMPLES.forEach(async name => {
+      try {
+        const resp = await fetch(`mp3/${name}.mp3`);
+        const ab   = await resp.arrayBuffer();
+        buffers[name] = await decodeAudio(ab);
+      } catch (err) {
+        console.warn(`Failed to load ${name}.mp3`, err);
+      }
+      onProgress();
+    });
+
+    // ── Service Worker ────────────────────────────────────────────────────────
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(console.warn);
+      });
+    }
+  </script>
+</body>
+</html>
