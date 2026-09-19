@@ -245,16 +245,13 @@
     const SAMPLES = ['00','01','02','03','04','05','06','07','08'];
 
     // ── Audio context ─────────────────────────────────────────────────────────
-    // Create immediately so we can decode; will resume on first tap.
-    let ctx;
-    function getCtx() {
-      if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state === 'suspended') ctx.resume();
-      return ctx;
-    }
+    // Single context used for both decoding and playback.
+    // iOS starts it suspended; resume() is called on every tap.
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Unlock audio on first touch (needed for iOS)
-    document.addEventListener('pointerdown', () => getCtx(), { once: true });
+    function ensureRunning() {
+      if (ctx.state !== 'running') ctx.resume();
+    }
 
     // ── State ─────────────────────────────────────────────────────────────────
     const buffers  = {};   // name → AudioBuffer
@@ -277,7 +274,7 @@
 
     // ── Trigger ───────────────────────────────────────────────────────────────
     function trigger(name) {
-      const audioCtx = getCtx();
+      ensureRunning();
       const buf = buffers[name];
       if (!buf) return;
 
@@ -289,10 +286,10 @@
         delete sources[name];
       }
 
-      const src = audioCtx.createBufferSource();
+      const src = ctx.createBufferSource();
       src.buffer = buf;
       src.loop = false;
-      src.connect(audioCtx.destination);
+      src.connect(ctx.destination);
 
       setState(name, 'playing');
       sources[name] = src;
@@ -333,9 +330,6 @@
     const loadingFill = document.getElementById('loading-fill');
     let loaded = 0;
 
-    // Need a context to decode; create one quietly.
-    const decodeCtx = new (window.AudioContext || window.webkitAudioContext)();
-
     function onProgress() {
       loaded++;
       loadingFill.style.width = `${(loaded / SAMPLES.length) * 100}%`;
@@ -347,7 +341,7 @@
     }
 
     function decodeAudio(arrayBuffer) {
-      return new Promise((res, rej) => decodeCtx.decodeAudioData(arrayBuffer, res, rej));
+      return new Promise((res, rej) => ctx.decodeAudioData(arrayBuffer, res, rej));
     }
 
     SAMPLES.forEach(async name => {
